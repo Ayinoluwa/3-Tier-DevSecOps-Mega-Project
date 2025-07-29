@@ -14,7 +14,7 @@ services:
     ports:
       - "3306:3306"
 
-  backend:
+  backend-svc:
     build: ./api
     container_name: backend-api
     environment:

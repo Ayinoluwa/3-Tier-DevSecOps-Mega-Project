@@ -5,8 +5,8 @@ metadata:
   labels:
     app: backend
 stringData:
-  DB_PASSWORD: Aditya
-  JWT_SECRET: devopsShackSuperSecretKey
+  DB_PASSWORD: Ewatomi
+  JWT_SECRET: DevSecOpsPipelineKey
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -36,7 +36,7 @@ spec:
     spec:
       containers:
         - name: backend
-          image: adijaiswal/backend:latest
+          image: ewatomi/backend:latest
           ports:
             - containerPort: 5000
           env:

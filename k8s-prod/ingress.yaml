@@ -10,7 +10,7 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-    - host: devopsewatomi.com
+    - host: devops-ewatomi.com
       http:
         paths:
           - path: /api
@@ -27,7 +27,7 @@ spec:
                 name: frontend-svc
                 port:
                   number: 80
-    - host: devopsewatomi.com
+    - host: devops-ewatomi.com
       http:
         paths:
           - path: /api
@@ -46,6 +46,6 @@ spec:
                   number: 80
   tls:
     - hosts:
-        - devopsewatomi.com
-        - www.devopsewatomi.com
-      secretName: devopsewatomi-co-tls
+        - devops-ewatomi.com
+        - www.devops-ewatomi.com
+      secretName: devops-ewatomi-co-tls

@@ -1,18 +1,20 @@
-
 pipeline {
     agent any
     
     tools {
         nodejs 'nodejs23'
     }
-
+    
     environment {
         SCANNER_HOME = tool 'sonar-scanner'
+        PROJECT_NAME = '🧰 DevSecOps App'
+        ENVIRONMENT = '🚀 Production'
     }
+    
     stages {
         stage('Git Checkout') {
             steps {
-                git branch: 'main', url: 'https://github.com/jaiswaladi246/3-Tier-DevSecOps-Mega-Project.git'
+                git branch: 'main', url: 'https://github.com/Ayinoluwa/3-Tier-DevSecOps-Mega-Project.git'
             }
         }
         
@@ -41,12 +43,13 @@ pipeline {
         
         stage('SonarQube Analysis') {
             steps {
-                withSonarQubeEnv('sonar') {
+                withSonarQubeEnv('sonarqube') {
                     sh ''' $SCANNER_HOME/bin/sonar-scanner -Dsonar.projectName=NodeJS-Project \
                             -Dsonar.projectKey=NodeJS-Project '''
                 }
             }
         }
+        
         stage('Quality Gate Check') {
             steps {
                 timeout(time: 1, unit: 'HOURS') {
@@ -54,20 +57,20 @@ pipeline {
                 }
             }
         }
+
         stage('Trivy FS Scan') {
             steps {
                 sh 'trivy fs --format table -o fs-report.html .'
             }
         }
-        
         stage('Build-Tag & Push Backend Docker Image') {
             steps {
                 script {
-                    withDockerRegistry(credentialsId: 'docker-cred') {
+                    withDockerRegistry(credentialsId: 'docker-creds') {
                         dir('api') {
-                            sh 'docker build -t adijaiswal/backend:latest .'
-                            sh 'trivy image --format table -o backend-image-report.html adijaiswal/backend:latest '
-                            sh 'docker push adijaiswal/backend:latest'
+                            sh 'docker build -t ewatomi/backend:latest .'
+                            sh 'trivy image --format table -o backend-image-report.html ewatomi/backend:latest '
+                            sh 'docker push ewatomi/backend:latest'
                            
                         }
                     }
@@ -78,17 +81,16 @@ pipeline {
         stage('Build-Tag & Push Frontend Docker Image') {
             steps {
                 script {
-                    withDockerRegistry(credentialsId: 'docker-cred') {
+                    withDockerRegistry(credentialsId: 'docker-creds') {
                         dir('client') {
-                            sh 'docker build -t adijaiswal/frontend:latest .'
-                            sh 'trivy image --format table -o frontend-image-report.html adijaiswal/frontend:latest '
-                            sh 'docker push adijaiswal/frontend:latest'
+                            sh 'docker build -t ewatomi/frontend:latest .'
+                            sh 'trivy image --format table -o frontend-image-report.html ewatomi/frontend:latest '
+                            sh 'docker push ewatomi/frontend:latest'
                         }
                     }
                 }
             }
-             
-        }  
+        }
         
         stage('Manual Approval for Production') {
             steps {
@@ -101,7 +103,7 @@ pipeline {
        stage('Deployment To Prod') {
             steps {
                 script {
-                    withKubeConfig(caCertificate: '', clusterName: 'devopsshack-cluster', contextName: '', credentialsId: 'k8-prod-token', namespace: 'prod', restrictKubeConfigAccess: false, serverUrl: 'https://AFC6FCFF5360B30D5E8950396E38A8C4.gr7.ap-south-1.eks.amazonaws.com') {
+                    withKubeConfig(caCertificate: '', clusterName: 'devopsshack-cluster', contextName: '', credentialsId: 'k8-token-prod', namespace: 'prod', restrictKubeConfigAccess: false, serverUrl: 'https://98B091CBBBBF9389DF02454B4F0AB705.gr7.us-east-1.eks.amazonaws.com') {
                         sh 'kubectl apply -f k8s-prod/sc.yaml'
                         sleep 20
                         sh 'kubectl apply -f k8s-prod/mysql.yaml -n prod'
@@ -115,10 +117,10 @@ pipeline {
             }
         }
         
-        stage('Verify Deployment To Prod') {
+         stage('Verify Deployment To Prod') {
             steps {
                 script {
-                    withKubeConfig(caCertificate: '', clusterName: 'devopsshack-cluster', contextName: '', credentialsId: 'k8-prod-token', namespace: 'prod', restrictKubeConfigAccess: false, serverUrl: 'https://AFC6FCFF5360B30D5E8950396E38A8C4.gr7.ap-south-1.eks.amazonaws.com') {
+                    withKubeConfig(caCertificate: '', clusterName: 'devopsshack-cluster', contextName: '', credentialsId: 'k8-token-prod', namespace: 'prod', restrictKubeConfigAccess: false, serverUrl: 'https://98B091CBBBBF9389DF02454B4F0AB705.gr7.us-east-1.eks.amazonaws.com') {
                         sh 'kubectl get pods -n prod'
                         sleep 20
                          sh 'kubectl get ingress -n prod'
@@ -126,7 +128,74 @@ pipeline {
                     }
                 }
             }
+        }       
+    }
+    
+    post {
+        success {
+            withCredentials([string(credentialsId: 'slack-webhook', variable: 'SLACK_URL')]) {
+                script {
+                    def message = """{
+                        "text": "*✅ ${PROJECT_NAME} Build Successful!*",
+                        "attachments": [
+                            {
+                                "color": "#36a64f",
+                                "fields": [
+                                    { "title": "Job", "value": "${env.JOB_NAME}", "short": true },
+                                    { "title": "Build", "value": "#${env.BUILD_NUMBER}", "short": true },
+                                    { "title": "Environment", "value": "${ENVIRONMENT}", "short": true }
+                                ],
+                                "footer": "Jenkins CI",
+                                "footer_icon": "https://www.jenkins.io/images/logos/jenkins/jenkins.png",
+                                "ts": ${System.currentTimeMillis() / 1000},
+                                "actions": [
+                                    {
+                                        "type": "button",
+                                        "text": "View Build",
+                                        "url": "${env.BUILD_URL}",
+                                        "style": "primary"
+                                    }
+                                ]
+                            }
+                        ]
+                    }"""
+                    sh """curl -X POST -H 'Content-type: application/json' --data '${message}' $SLACK_URL"""
+                }
+            }
         }
-            
+        failure {
+            withCredentials([string(credentialsId: 'slack-webhook', variable: 'SLACK_URL')]) {
+                script {
+                    def message = """{
+                        "text": "<!here> *❌ ${PROJECT_NAME} Build Failed!*",
+                        "attachments": [
+                            {
+                                "color": "#FF0000",
+                                "fields": [
+                                    { "title": "Job", "value": "${env.JOB_NAME}", "short": true },
+                                    { "title": "Build", "value": "#${env.BUILD_NUMBER}", "short": true },
+                                    { "title": "Environment", "value": "${ENVIRONMENT}", "short": true }
+                                ],
+                                "footer": "Jenkins CI",
+                                "footer_icon": "https://www.jenkins.io/images/logos/jenkins/jenkins.png",
+                                "ts": ${System.currentTimeMillis() / 1000},
+                                "actions": [
+                                    {
+                                        "type": "button",
+                                        "text": "View Build Logs",
+                                        "url": "${env.BUILD_URL}",
+                                        "style": "danger"
+                                    }
+                                ]
+                            }
+                        ]
+                    }"""
+                    sh """curl -X POST -H 'Content-type: application/json' --data '${message}' $SLACK_URL"""
+                }
+            }
+        }
+        always {
+            echo "🎯 Post-build notification sent"
+        }
     }
 }
